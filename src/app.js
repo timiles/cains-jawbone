@@ -92,20 +92,52 @@ function ResourceLoader({ url, onLoaded }) {
   return error ? html`<p class="error">${error}</p>` : html`<p>Loading...</p>`;
 }
 
-function SearchTextInputControl({ onChange }) {
-  const handleChangeFile = e => {
+function SearchTextInputControl({ onSubmit }) {
+  const [searchText, setSearchText] = useState();
+
+  const handleChangeTextArea = (e) => {
+    const { value } = e.currentTarget;
+    setSearchText(value);
+  };
+
+  const handleChangeFile = (e) => {
     const [file] = e.currentTarget.files;
     if (file) {
-      file.text().then(onChange);
+      file.text().then(setSearchText);
     }
-  }
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSubmit(searchText);
+  };
 
   return html`
-    <label>
-      Select a text file to search for matching quotes:
-      <input type="file" class="ml-1" oninput=${handleChangeFile} />
-    </label>
-    <p><small>All processing happens in your browser, nothing is uploaded to the internet.</small></p>
+    <form onSubmit=${handleSubmit}>
+      <fieldset>
+        <label>
+          Enter text to search for matching quotes:
+          <textarea
+            placeholder="Search text"
+            class="mb-0"
+            value=${searchText}
+            onBlur=${handleChangeTextArea}
+          />
+        </label>
+        <label class="label-inline">
+          or import from a text file:
+          <input
+            type="file"
+            class="ml-1"
+            onInput=${handleChangeFile}
+          />
+        </label>
+        <div>
+          <input class="button-primary" type="submit" value="Process" />
+        </div>
+      </fieldset>
+      <p><small>All processing happens in your browser, nothing is uploaded to the internet.</small></p>
+    </form>
   `;  
 }
 
@@ -178,7 +210,7 @@ function QuoteFinderContainer() {
     setJawboneWords(extractWords(text));
   }
 
-  const handleChangeSearchText = (text) => {
+  const handleSubmitSearchText = (text) => {
     setSearchWords(extractWords(text));
   }
 
@@ -194,7 +226,7 @@ function QuoteFinderContainer() {
   return html`
     <h1>Cain’s Jawbone Quote Finder</h1>
     <${SearchTextInputControl}
-      onChange=${handleChangeSearchText}
+      onSubmit=${handleSubmitSearchText}
     />
     ${searchWords && html`
       <${QuoteFinder}
