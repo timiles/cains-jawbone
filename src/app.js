@@ -1,76 +1,27 @@
 import { html, render } from 'https://unpkg.com/htm/preact/index.mjs?module'
 import { useState, useEffect } from 'https://unpkg.com/preact/hooks/dist/hooks.module.js?module';
 
-const MINIMUM_QUOTE_LENGTH = 5;
-const WORD_BREAK_CHARS = ' —\t\r\n'.split('');
+/* Web workers */
+const extractWordsWorker = new Worker('src/workers/extractWords.js');
+const findMatchingQuotesWorker = new Worker('src/workers/findMatchingQuotes.js');
 
-/* Utils */
-function normalizeWord(word) {
-  // Replace diacritics; remove non-alpha characters; lowercase
-  return word.normalize('NFKD').replace(/[^\w]/g, '').toLowerCase();
-}
-
-function extractWords(text) {
-  const lines = text.split('\n');
-  const words = [];
-  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-    let word = '';
-    const line = lines[lineIndex];
-    let startCharIndex = -1;
-    for (let charIndex = 0; charIndex < line.length; charIndex++) {
-      const char = line[charIndex];
-      if (WORD_BREAK_CHARS.includes(char)) {
-        word = normalizeWord(word);
-        if (word) {
-          words.push({ word, lineIndex, startCharIndex, endCharIndex: charIndex });
-          word = '';
-          startCharIndex = -1;
-        }
-      } else {
-        if (startCharIndex === -1) {
-          startCharIndex = charIndex;
-        }
-        word += char;
+function configureEvents(worker, onResult, onProgress) {
+  worker.onerror = console.error;
+  worker.onmessage = ({ data: { event, ...args } }) => {
+    switch (event) {
+      case 'onProgress': {
+        onProgress && onProgress(args.progressPercent);
+        break;
+      }
+      case 'onResult': {
+        onResult(args.result);
+        break;
+      }
+      default: {
+        throw `Unexpected event: ${event}.`;
       }
     }
-    word = normalizeWord(word);
-    if (word) {
-      words.push({ word, lineIndex, startCharIndex, endCharIndex: line.length });
-    }
-  }
-  return words;
-}
-
-function findMatchingQuotes(words1, words2) {
-  const quotes = [];
-  for (let index1 = 0; index1 < words1.length; index1++) {
-    let quoteLength = 0;
-    for (let index2 = 0; index2 < words2.length; index2++) {
-      if ((index1 + quoteLength) >= words1.length ||
-        index2 === words2.length - 1 ||
-        words1[index1 + quoteLength].word !== words2[index2].word) {
-        // Reached the end of a matching quote
-        if (quoteLength >= MINIMUM_QUOTE_LENGTH) {
-          const quoteEndIndex = index1 + quoteLength - 1;
-          const longerQuoteAlreadyFound = quotes.some(({ startLineIndex, startCharIndex, endLineIndex, endCharIndex }) =>
-            startLineIndex === words1[index1].lineIndex && startCharIndex <= words1[index1].startCharIndex &&
-            endLineIndex === words1[quoteEndIndex].lineIndex && endCharIndex >= words1[quoteEndIndex].endCharIndex);
-          if (!longerQuoteAlreadyFound) {
-            quotes.push({
-              startLineIndex: words1[index1].lineIndex,
-              startCharIndex: words1[index1].startCharIndex,
-              endLineIndex: words1[quoteEndIndex].lineIndex,
-              endCharIndex: words1[quoteEndIndex].endCharIndex,
-            });
-          }
-        }
-        quoteLength = 0;
-      } else {
-        quoteLength++;
-      }
-    }
-  }
-  return quotes;
+  };  
 }
 
 /* React components */
@@ -143,6 +94,7 @@ function SearchTextInputControl({ onSubmit }) {
 
 function QuoteFinder({ jawboneText, jawboneWords, searchWords }) {
   const [quotes, setQuotes] = useState();
+  const [progressPercent, setProgressPercent] = useState();
 
   useEffect(() => {
     setQuotes(null);
@@ -150,12 +102,13 @@ function QuoteFinder({ jawboneText, jawboneWords, searchWords }) {
 
   useEffect(() => {
     if (!quotes) {
-      setQuotes(findMatchingQuotes(jawboneWords, searchWords));
+      configureEvents(findMatchingQuotesWorker, setQuotes, setProgressPercent);
+      findMatchingQuotesWorker.postMessage({ words1: jawboneWords, words2: searchWords });
     }
   }, [quotes]);
   
   if (!quotes) {
-    return html`<p><i>Processing...</i></p>`;
+    return html`<p><i>Processing... ${progressPercent}%</i></p>`;
   }
 
   if (quotes.length === 0) {
@@ -207,11 +160,14 @@ function QuoteFinderContainer() {
 
   const handleJawboneTextLoaded = (text) => {
     setJawbonePages(text.split('\n'));
-    setJawboneWords(extractWords(text));
+
+    configureEvents(extractWordsWorker, setJawboneWords);
+    extractWordsWorker.postMessage({ text });
   }
 
   const handleSubmitSearchText = (text) => {
-    setSearchWords(extractWords(text));
+    configureEvents(extractWordsWorker, setSearchWords);
+    extractWordsWorker.postMessage({ text });
   }
 
   if (!jawbonePages) {
