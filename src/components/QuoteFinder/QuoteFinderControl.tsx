@@ -1,9 +1,10 @@
 import { h } from "preact";
 import { useEffect, useState } from "preact/hooks";
+import { APP_BASE } from "../../constants";
 import { configureEvents } from "../../utils/workerUtils";
 
 const findMatchingQuotesWorker = new Worker(
-  "/assets/workers/findMatchingQuotes.js"
+  `${APP_BASE}/assets/workers/findMatchingQuotes.js`
 );
 
 interface IQuote {

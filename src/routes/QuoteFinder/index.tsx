@@ -3,9 +3,12 @@ import { useState } from "preact/hooks";
 import QuoteFinderControl from "../../components/QuoteFinder/QuoteFinderControl";
 import ResourceLoader from "../../components/QuoteFinder/ResourceLoader";
 import SearchTextInputControl from "../../components/QuoteFinder/SearchTextInputControl";
+import { APP_BASE } from "../../constants";
 import { configureEvents } from "../../utils/workerUtils";
 
-const extractWordsWorker = new Worker("/assets/workers/extractWords.js");
+const extractWordsWorker = new Worker(
+  `${APP_BASE}/assets/workers/extractWords.js`
+);
 
 const QuoteFinder = () => {
   const [jawbonePages, setJawbonePages] = useState<string[]>();
@@ -27,7 +30,7 @@ const QuoteFinder = () => {
   if (!jawbonePages) {
     return (
       <ResourceLoader
-        url="/assets/cainsjawbone.txt"
+        url={`${APP_BASE}/assets/cainsjawbone.txt`}
         onLoaded={handleJawboneTextLoaded}
       />
     );
